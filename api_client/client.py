@@ -1,4 +1,6 @@
 from enum import StrEnum
+from this import s
+from typing import Any
 
 import httpx
 
@@ -14,9 +16,11 @@ class GlobalPingMeasurement(StrEnum):
 class GlobalPingClient:
     BASE_URL = "https://api.globalping.io"
     MEASUREMENT_URL = "/v1/measurements"
+    LIMITS_URL = "/v1/limits"
 
     def __init__(self):
         self.client = httpx.Client(base_url=self.BASE_URL)
+        self.limits = None
 
     def _start(
         self,
@@ -50,3 +54,13 @@ class GlobalPingClient:
                     self.result = result
             else:
                 response.raise_for_status()
+
+    def get_limits(self) -> None:
+        response = self.client.request("GET", self.LIMITS_URL)
+        if response.is_success:
+            result = response.json()
+            rateLimit = result.get("rateLimit", {}).get("measurements", {})
+            self.limits = rateLimit
+            return self.limits
+        else:
+            response.raise_for_status()
