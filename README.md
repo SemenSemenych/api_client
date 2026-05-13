@@ -3,3 +3,4 @@
 
 ## API endpoints:
 ### post /v1/measurements
+### get /v1/measurements/:id
