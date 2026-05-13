@@ -1,26 +1,53 @@
+import time
 from enum import StrEnum
-from this import s
-from typing import Any
 
 import httpx
 
 
 class GlobalPingMeasurement(StrEnum):
-    PING = "ping"
-    TRACEROUTE = "traceroute"
-    DNS = "dns"
-    MTR = "mtr"
-    HTTP = "http"
+    ping = "ping"
+    traceroute = "traceroute"
+    dns = "dns"
+    mtr = "mtr"
+    http = "http"
 
 
 class GlobalPingClient:
-    BASE_URL = "https://api.globalping.io"
-    MEASUREMENT_URL = "/v1/measurements"
-    LIMITS_URL = "/v1/limits"
+    base_url = "https://api.globalping.io"
+    measurement_url = "/v1/measurements"
+    limits_url = "/v1/limits"
 
     def __init__(self):
-        self.client = httpx.Client(base_url=self.BASE_URL)
+        self.client = httpx.Client(base_url=self.base_url)
         self.limits = None
+        self.request_result = None
+
+    def acquire_limits(self) -> None:
+        response = self.client.request("GET", self.limits_url)
+        if response.is_success:
+            limits_result = response.json()
+            rateLimit = limits_result.get("rateLimit", {}).get("measurements", {})
+            self.limits = rateLimit
+            return self.limits
+        else:
+            response.raise_for_status()
+
+    def ping(
+        self,
+        target: str,
+        location: str = "",
+        retries: int = 5,
+        interval: int = 5,
+        **kwargs,
+    ) -> None:
+        self._start(GlobalPingMeasurement.ping, target, location, **kwargs)
+        for _ in range(retries):
+            self._get_result()
+            if self.request_result and self.request_result.get("status") == "finished":
+                return self.request_result.get("results", [{}])[0].get("result", {})
+            time.sleep(interval)
+
+        raise TimeoutError(f"Ping failed to finish after {retries} retries")
 
     def _start(
         self,
@@ -31,7 +58,7 @@ class GlobalPingClient:
     ) -> None:
         response = self.client.request(
             "POST",
-            self.MEASUREMENT_URL,
+            self.measurement_url,
             json={
                 "type": measurement.value,
                 "target": target,
@@ -47,20 +74,10 @@ class GlobalPingClient:
 
     def _get_result(self) -> None:
         if self.id:
-            response = self.client.request("GET", f"{self.MEASUREMENT_URL}/{self.id}")
+            response = self.client.request("GET", f"{self.measurement_url}/{self.id}")
             if response.is_success:
-                result = response.json()
-                if result["status"] == "finished":
-                    self.result = result
+                request_result = response.json()
+                if request_result["status"] == "finished":
+                    self.request_result = request_result
             else:
                 response.raise_for_status()
-
-    def get_limits(self) -> None:
-        response = self.client.request("GET", self.LIMITS_URL)
-        if response.is_success:
-            result = response.json()
-            rateLimit = result.get("rateLimit", {}).get("measurements", {})
-            self.limits = rateLimit
-            return self.limits
-        else:
-            response.raise_for_status()

@@ -1,6 +1,8 @@
+from turtle import ht
+
+import httpx
 import pytest
 import respx
-from httpx import Response
 
 from api_client.client import GlobalPingClient, GlobalPingMeasurement
 
@@ -10,13 +12,13 @@ def test_start_success():
     # Arrange
     client = GlobalPingClient()
     mock_response_data = {"id": "test-measurement-id-123"}
-    respx.post(client.MEASUREMENT_URL).mock(
-        return_value=Response(202, json=mock_response_data)
+    respx.post(client.measurement_url).mock(
+        return_value=httpx.Response(httpx.codes.ACCEPTED, json=mock_response_data)
     )
 
     # Act
     client._start(
-        measurement=GlobalPingMeasurement.PING,
+        measurement=GlobalPingMeasurement.ping,
         target="8.8.8.8",
         location="US",
         custom_option="value",
@@ -36,11 +38,13 @@ def test_start_success():
 def test_start_failure():
     # Arrange
     client = GlobalPingClient()
-    respx.post(client.MEASUREMENT_URL).mock(return_value=Response(400))
+    respx.post(client.measurement_url).mock(
+        return_value=httpx.Response(httpx.codes.BAD_REQUEST)
+    )
 
     # Act & Assert
     with pytest.raises(Exception):
-        client._start(measurement=GlobalPingMeasurement.PING, target="8.8.8.8")
+        client._start(measurement=GlobalPingMeasurement.ping, target="8.8.8.8")
 
 
 @respx.mock
@@ -48,14 +52,64 @@ def test_limits_success():
     # Arrange
     client = GlobalPingClient()
     mock_limits_data = {"rateLimit": {"measurements": {"limit": 100, "remaining": 50}}}
-    respx.get(f"{client.BASE_URL}{client.LIMITS_URL}").mock(
-        return_value=Response(200, json=mock_limits_data)
+    respx.get(f"{client.base_url}{client.limits_url}").mock(
+        return_value=httpx.Response(httpx.codes.OK, json=mock_limits_data)
     )
 
     # Act
-    result = client.get_limits()
+    limits_result = client.acquire_limits()
 
     # Assert
-    assert result == {"limit": 100, "remaining": 50}
+    assert limits_result == {"limit": 100, "remaining": 50}
     assert client.limits == {"limit": 100, "remaining": 50}
     assert len(respx.calls) == 1
+
+
+@respx.mock
+def test_ping_success():
+    # Arrange
+    client = GlobalPingClient()
+    mock_start_data = {"id": "test-ping-id"}
+    mock_result_pending = {"status": "pending"}
+    mock_result_finished = {
+        "status": "finished",
+        "results": [{"result": {"latency": 10, "loss": 0}}],
+    }
+
+    respx.post(client.measurement_url).mock(
+        return_value=httpx.Response(httpx.codes.ACCEPTED, json=mock_start_data)
+    )
+    respx.get(f"{client.measurement_url}/test-ping-id").mock(
+        side_effect=[
+            httpx.Response(httpx.codes.OK, json=mock_result_pending),
+            httpx.Response(httpx.codes.OK, json=mock_result_finished),
+        ]
+    )
+
+    # Act
+    ping_result = client.ping(target="8.8.8.8", interval=1)
+
+    # Assert
+    assert ping_result == {"latency": 10, "loss": 0}
+    assert len(respx.calls) == 3
+
+
+@respx.mock
+def test_ping_timeout():
+    # Arrange
+    client = GlobalPingClient()
+    mock_start_data = {"id": "test-ping-timeout-id"}
+    mock_result_pending = {"status": "pending"}
+
+    respx.post(client.measurement_url).mock(
+        return_value=httpx.Response(httpx.codes.ACCEPTED, json=mock_start_data)
+    )
+    respx.get(f"{client.measurement_url}/test-ping-timeout-id").mock(
+        return_value=httpx.Response(httpx.codes.OK, json=mock_result_pending)
+    )
+
+    # Act & Assert
+    with pytest.raises(TimeoutError) as excinfo:
+        client.ping(target="8.8.8.8", retries=2, interval=1)
+
+    assert "Ping failed to finish after 2 retries" in str(excinfo.value)
