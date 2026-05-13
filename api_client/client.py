@@ -36,7 +36,7 @@ class GlobalPingClient:
             },
         )
 
-        if response.status_code == 202:
+        if response.is_success:
             self.id = response.json()["id"]
         else:
             response.raise_for_status()
@@ -44,7 +44,7 @@ class GlobalPingClient:
     def _get_result(self) -> None:
         if self.id:
             response = self.client.request("GET", f"{self.MEASUREMENT_URL}/{self.id}")
-            if response.status_code == 200:
+            if response.is_success:
                 result = response.json()
                 if result["status"] == "finished":
                     self.result = result
