@@ -1,5 +1,3 @@
-from turtle import ht
-
 import httpx
 import pytest
 import respx
