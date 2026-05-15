@@ -3,7 +3,9 @@ from enum import StrEnum
 
 import httpx
 
-from .models import LimitsModel, CreateLimitsModel
+from api_client.models_limit import CreateLimitsModel, LimitsModel
+from api_client.models_probe_start import NewProbeModel
+from api_client.models_ping import ProbeResultModel, ResultPropsModel
 
 
 class GlobalPingMeasurement(StrEnum):
@@ -42,12 +44,12 @@ class GlobalPingClient:
         retries: int = 5,
         interval: int = 5,
         **kwargs,
-    ) -> None:
+    ) -> ResultPropsModel:
         self._start(GlobalPingMeasurement.ping, target, location, **kwargs)
         for _ in range(retries):
             self._get_result()
-            if self.request_result and self.request_result.get("status") == "finished":
-                return self.request_result.get("results", [{}])[0].get("result", {})
+            if self.request_result and self.request_result.status == "finished":
+                return self.request_result.results[0].result
             time.sleep(interval)
 
         raise TimeoutError(f"Ping failed to finish after {retries} retries")
@@ -71,7 +73,8 @@ class GlobalPingClient:
         )
 
         if response.is_success:
-            self.id = response.json()["id"]
+            answer = NewProbeModel(**response.json())
+            self.id = answer.id
         else:
             response.raise_for_status()
 
@@ -79,8 +82,8 @@ class GlobalPingClient:
         if self.id:
             response = self.client.request("GET", f"{self.measurement_url}/{self.id}")
             if response.is_success:
-                request_result = response.json()
-                if request_result["status"] == "finished":
+                request_result = ProbeResultModel(**response.json())
+                if request_result.status == "finished":
                     self.request_result = request_result
             else:
                 response.raise_for_status()

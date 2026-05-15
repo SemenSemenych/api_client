@@ -1,6 +1,8 @@
 from pydantic import BaseModel
 
+
 class CreateLimitsModel(BaseModel):
+    """ Moder for getting limits """
     type: str
     limit: int
     remaining: int
@@ -9,9 +11,10 @@ class CreateLimitsModel(BaseModel):
 class CreateMeasurementModel(BaseModel):
     create: CreateLimitsModel
 
-class  MeasurementModel(BaseModel):
+
+class MeasurementModel(BaseModel):
     measurements: CreateMeasurementModel
+
 
 class LimitsModel(BaseModel):
     rateLimit: MeasurementModel
-
