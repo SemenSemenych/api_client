@@ -3,6 +3,7 @@ import pytest
 import respx
 
 from api_client.client import GlobalPingClient, GlobalPingMeasurement
+from api_client.models import CreateLimitsModel
 
 
 @respx.mock
@@ -49,7 +50,8 @@ def test_start_failure():
 def test_limits_success():
     # Arrange
     client = GlobalPingClient()
-    mock_limits_data = {"rateLimit": {"measurements": {"limit": 100, "remaining": 50}}}
+    mock_limits_data = {
+        "rateLimit": {"measurements": {"create": {"type": "ip", "limit": 100, "remaining": 95, "reset": 3599}}}}
     respx.get(f"{client.base_url}{client.limits_url}").mock(
         return_value=httpx.Response(httpx.codes.OK, json=mock_limits_data)
     )
@@ -58,8 +60,8 @@ def test_limits_success():
     limits_result = client.acquire_limits()
 
     # Assert
-    assert limits_result == {"limit": 100, "remaining": 50}
-    assert client.limits == {"limit": 100, "remaining": 50}
+    assert limits_result == CreateLimitsModel(**{"type": "ip", "limit": 100, "remaining": 95, "reset": 3599})
+    assert client.limits == CreateLimitsModel(**{"type": "ip", "limit": 100, "remaining": 95, "reset": 3599})
     assert len(respx.calls) == 1
 
 

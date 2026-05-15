@@ -3,6 +3,8 @@ from enum import StrEnum
 
 import httpx
 
+from .models import LimitsModel, CreateLimitsModel
+
 
 class GlobalPingMeasurement(StrEnum):
     ping = "ping"
@@ -22,15 +24,16 @@ class GlobalPingClient:
         self.limits = None
         self.request_result = None
 
-    def acquire_limits(self) -> None:
+    def acquire_limits(self) -> CreateLimitsModel | None:
         response = self.client.request("GET", self.limits_url)
         if response.is_success:
             limits_result = response.json()
-            rateLimit = limits_result.get("rateLimit", {}).get("measurements", {})
-            self.limits = rateLimit
-            return self.limits
+            limits = LimitsModel(**limits_result)
+            self.limits = limits.rateLimit.measurements.create
+            return limits.rateLimit.measurements.create
         else:
             response.raise_for_status()
+            return None
 
     def ping(
         self,
