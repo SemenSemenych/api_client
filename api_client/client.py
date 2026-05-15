@@ -21,9 +21,9 @@ class GlobalPingClient:
     measurement_url = "/v1/measurements"
     limits_url = "/v1/limits"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.client = httpx.Client(base_url=self.base_url)
-        self.limits = None
+        self.limits: CreateLimitsModel | None = None
         self.request_result = None
 
     def acquire_limits(self) -> CreateLimitsModel | None:
@@ -37,30 +37,17 @@ class GlobalPingClient:
             response.raise_for_status()
             return None
 
-    def ping(
-        self,
-        target: str,
-        location: str = "",
-        retries: int = 5,
-        interval: int = 5,
-        **kwargs,
-    ) -> ResultPropsModel:
+    def ping(self, target: str, location: str = "", retries: int = 5, interval: int = 5, **kwargs) -> ResultPropsModel:
         self._start(GlobalPingMeasurement.ping, target, location, **kwargs)
         for _ in range(retries):
-            self._get_result()
+            self.request_result = self._get_result()
             if self.request_result and self.request_result.status == "finished":
                 return self.request_result.results[0].result
             time.sleep(interval)
 
         raise TimeoutError(f"Ping failed to finish after {retries} retries")
 
-    def _start(
-        self,
-        measurement: GlobalPingMeasurement,
-        target: str,
-        location: str = "",
-        **kwargs,
-    ) -> None:
+    def _start(self, measurement: GlobalPingMeasurement, target: str, location: str = "", **kwargs, ) -> None:
         response = self.client.request(
             "POST",
             self.measurement_url,
@@ -78,12 +65,13 @@ class GlobalPingClient:
         else:
             response.raise_for_status()
 
-    def _get_result(self) -> None:
+    def _get_result(self) -> ProbeResultModel | None:
         if self.id:
             response = self.client.request("GET", f"{self.measurement_url}/{self.id}")
             if response.is_success:
                 request_result = ProbeResultModel(**response.json())
                 if request_result.status == "finished":
-                    self.request_result = request_result
+                    return request_result
             else:
                 response.raise_for_status()
+        return None
